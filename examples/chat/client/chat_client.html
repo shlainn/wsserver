@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Chat Example</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="msgpack.js"></script>
+    <style>
+        html, body {padding:0; margin:0; width:100%; height:100%; background-color: #202020; color: white;}
+        input, button {display:block; position: absolute; height: 30px; background: #252525; border:1px #202020 solid; box-sizing: border-box; color: white; padding:5px;}
+        #chatbox {display:block;position:absolute; left:50%; top: 50%; height: 600px; width: 600px; margin-left: -300px; margin-top:-300px; border-radius:10px; background: #323232; padding:10px}
+        #chat_users {display:block; position: absolute; left:10px; top: 10px; width: 130px; height: 540px; background: #252525; padding:10px}
+        #chat_content {display:block; position: absolute; left:170px; top: 10px; width: 420px; height: 540px; background: #252525; padding:10px}
+        #chat_msg, #user_name{left:10px; bottom: 10px; width: 560px; }
+        #chat_msg {width: 540px}
+        #user_name_go, #chat_msg_go {right:10px; bottom: 10px; width: 50px; }
+        #name_prompt {display:block;position:absolute; left:50%; top: 50%; height: 60px; width: 620px; margin-left: -310px; margin-top:-60px;  border-radius:10px; background: #323232; padding:10px; font-size:20px }
+        .username {font-weight:bold}
+    </style>
+  </head>
+  <body>
+  <h1 style="text-align:center">Chat client example</h1>
+    <div id = "chatbox" style="opacity:0.3">
+        <div id = "chat_users"></div>
+        <div id = "chat_content"></div>
+        <input id = "chat_msg" disabled=disabled/>
+        <button id = "chat_msg_go">Go</button>
+    </div>
+    <div id = "name_prompt">Please enter your name:<br />
+        <input id="user_name"></input>
+        <button id="user_name_go">Go</button>
+    </div>
+    <script>
+        const Opcodes = {
+            CMSG_NEW_USER: 1,
+            SMSG_USER_LIST: 2,
+            MSG_CHATMESSAGE: 3
+        };
+        var ws;
+        const wsPath = "ws://localhost:8080"; // CHANGE THIS LINE AS NECESSARY
+
+        //Get the user name
+        var username_input = document.getElementById("user_name");
+        username_input.onkeypress = function(e) {
+            if(e.keyCode == 13 && username_input.value.trim().length > 0) {
+                startChat();
+            }
+        };
+        document.getElementById("user_name_go").onclick = function(e) {
+            if(username_input.value.trim().length > 0) {
+                startChat();
+            }
+        };
+        
+        //chatting!
+        var chat_input = document.getElementById("chat_msg");
+        chat_input.onkeypress = function(e) {
+            if(e.keyCode == 13 && chat_input.value.trim().length > 0) {
+                sendChatMessage();
+            }
+        };
+        document.getElementById("chat_msg_go").onclick = function(e) {
+            if(chat_input.value.trim().length > 0) {
+                sendChatMessage();
+            }
+        };
+        
+        function startChat() {
+            ws = new WebSocket(wsPath);
+            ws.binaryType = "arraybuffer";
+            ws.onopen = Open;
+            ws.onclose = function() {}; //ignore for this example
+            ws.onmessage = Message;
+            ws.onerror = function() {}; //ignore for this example
+        }
+        
+        function sendChatMessage() {
+            Send(Opcodes.MSG_CHATMESSAGE, {message: chat_input.value.trim()});
+            chat_input.value = "";
+        }
+        
+        //As soon as the websocket is open, send the username, and hide the username prompt
+        function Open() {
+            var username = username_input.value.trim();
+            if(username.length > 15) { //limit username length to 15 for display purposes
+                username = username.substr(0,15);
+            }
+            Send(Opcodes.CMSG_NEW_USER, {name: username});
+            
+            //update the visuals
+            document.getElementById("name_prompt").style.display = "none";
+            document.getElementById("chatbox").style.opacity = "1";
+            document.getElementById("chat_msg").disabled = false;
+            document.getElementById("chat_msg").focus();
+        }
+        
+        //message handler
+        function Message(msg) {
+            try {
+                var data = msgpack.decode(new Uint8Array(msg.data));
+                if(data instanceof Object && "opcode" in data) {
+                    switch (data.opcode) {
+                        case Opcodes.SMSG_USER_LIST: {
+                            document.getElementById("chat_users").innerHTML = data.list.join("<br />");
+                            break;
+                        }
+                        case Opcodes.MSG_CHATMESSAGE: {
+                            document.getElementById("chat_content").innerHTML += "<span class='username'>"+data.name+"</span>: "+data.message+"<br>";
+                            break;
+                        }
+                    }
+                    console.log(data);
+                } else {
+                    console.error(data);
+                    throw "Invalid message: No opcode";
+                }
+
+            } catch (error) {
+                console.error("Decoding Message failed. Error Message:");
+                console.error(error);
+                console.error("Original Message: ", msg);            
+            }
+        }
+        
+        //Send message
+        function Send(opcode, data) {
+            data.opcode = opcode
+            if(ws && ws.readyState == WebSocket.OPEN) {
+                ws.send(msgpack.encode(data));
+                console.log("sending", data)
+            } else {
+                console.warn("Could not send data:", data);
+                setTimeout(function() {
+                    Send(opcode, data);
+                }, 100);
+            }        
+        }   
+    </script>
+  </body>
+</html>

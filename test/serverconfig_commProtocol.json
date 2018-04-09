@@ -1,0 +1,5 @@
+{
+        "baseAdress": null,
+        "port": 8080,
+        "commProtocol": "TheProtocol"
+}

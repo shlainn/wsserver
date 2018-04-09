@@ -1,0 +1,6 @@
+{
+        "baseAdress": null,
+        "port": 8080,
+        "cleanupInterval": 0.1,
+        "logoutSpan": 0.05
+}
